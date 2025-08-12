@@ -6,7 +6,7 @@ from flask import Flask
 import threading
 import logging
 
-# Setup logging to show info level logs with timestamps
+# Setup logging
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -22,8 +22,24 @@ def home():
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
+# Robust polling with retry loop
 def run_bot():
-    bot.polling(skip_pending=True, none_stop=True)
+    while True:
+        try:
+            logging.info("Starting bot polling...")
+            bot.polling(skip_pending=True, none_stop=True)
+        except ApiTelegramException as e:
+            # Handle Telegram API exceptions like rate limiting
+            if e.error_code == 429:
+                retry_after = int(e.result_json['parameters']['retry_after'])
+                logging.warning(f"Rate limit hit. Sleeping for {retry_after} seconds.")
+                time.sleep(retry_after)
+            else:
+                logging.error(f"Telegram API error: {e}")
+                time.sleep(5)  # wait a bit before retrying
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            time.sleep(5)  # wait a bit before retrying
 
 def keep_alive():
     threading.Thread(target=run_flask).start()
