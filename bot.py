@@ -39,6 +39,7 @@ except FileNotFoundError:
 # === HANDLERS ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    print(f"Received /start from {message.from_user.username} ({message.from_user.id})")
     bot.reply_to(
         message,
         "Sila isi nama penuh murid dan hantar, pastikan tiada kesalahan ejaan pada nama."
@@ -46,18 +47,20 @@ def send_welcome(message):
 
 @bot.message_handler(func=lambda message: True)
 def send_info(message):
+    print(f"Received message: {message.text} from {message.from_user.username} ({message.from_user.id})")
     search_name = message.text.strip().upper()
 
     if df.empty:
+        print("Excel data is empty!")
         bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
         return
 
     matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
 
     if matches.empty:
+        print("No matching name found.")
         bot.reply_to(message, "Maaf, nama tidak dijumpai.")
     else:
-        # Only reply with the first (closest) match
         row = matches.iloc[0]
 
         reply_text = (
@@ -68,6 +71,7 @@ def send_info(message):
 
         try:
             bot.reply_to(message, reply_text)
+            print(f"Replied with data for {row['Nama Murid']}")
         except ApiTelegramException as e:
             if e.error_code == 429:
                 retry_after = int(e.result_json['parameters']['retry_after'])
