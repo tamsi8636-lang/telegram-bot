@@ -1,25 +1,24 @@
-import os
 import telebot
 import pandas as pd
-from flask import Flask, request
+import time
+from telebot.apihelper import ApiTelegramException
 
 # === CONFIG ===
-TOKEN = "8201238992:AAGZeU59gksGe6y6EE3ljETNim-RpjZjCCg"  # new token
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EXCEL_FILE = os.path.join(BASE_DIR, "ID DELIMA - DATA FEED CHATBOT.xlsx")
+TOKEN = "8201238992:AAGZeU59gksGe6y6EE3ljETNim-RpjZjCCg"
+EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
 
 bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
 
 # === LOAD EXCEL ===
 try:
     df = pd.read_excel(EXCEL_FILE)
     df['Nama Murid'] = df['Nama Murid'].astype(str).str.strip().str.upper()
-except Exception as e:
-    print(f"Error loading Excel file: {e}")
-    exit()
+    print("✅ Excel loaded successfully")
+except FileNotFoundError:
+    print("❌ Excel file not found. Make sure it's in the same folder.")
+    df = pd.DataFrame()
 
-# === BOT HANDLERS ===
+# === HANDLERS ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(
@@ -30,32 +29,37 @@ def send_welcome(message):
 @bot.message_handler(func=lambda message: True)
 def send_info(message):
     search_name = message.text.strip().upper()
+
+    if df.empty:
+        bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
+        return
+
     matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
 
     if matches.empty:
         bot.reply_to(message, "Maaf, nama tidak dijumpai.")
     else:
-        row = matches.iloc[0]
-        reply_text = (
-            f"Nama Murid: {row['Nama Murid']}\n"
-            f"Email: {row.iloc[1]}\n"
-            f"Password: {row.iloc[2]}"
-        )
-        bot.reply_to(message, reply_text)
+        # Combine all matching results into one reply
+        result_list = []
+        for _, row in matches.iterrows():
+            result_list.append(
+                f"Nama Murid: {row['Nama Murid']}\n"
+                f"Email: {row.iloc[1]}\n"
+                f"Password: {row.iloc[2]}"
+            )
 
-# === FLASK ROUTES FOR WEBHOOK ===
-@app.route('/' + TOKEN, methods=['POST'])
-def getMessage():
-    json_str = request.get_data().decode('UTF-8')
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "OK", 200
+        reply_text = "\n\n".join(result_list)
 
-@app.route("/")
-def webhook():
-    bot.remove_webhook()
-    bot.set_webhook(url=f"https://{os.environ.get('RENDER_URL')}/{TOKEN}")
-    return "Webhook set!", 200
+        # Try sending reply, handle rate limits
+        try:
+            bot.reply_to(message, reply_text)
+        except ApiTelegramException as e:
+            if e.error_code == 429:
+                retry_after = int(e.result_json['parameters']['retry_after'])
+                print(f"⏳ Rate limit hit, retrying after {retry_after}s")
+                time.sleep(retry_after)
+                bot.reply_to(message, reply_text)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+# === START BOT ===
+print("🚀 Bot is running...")
+bot.polling(skip_pending=True, none_stop=True)
