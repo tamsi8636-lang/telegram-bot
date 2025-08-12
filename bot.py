@@ -39,18 +39,15 @@ def send_info(message):
     if matches.empty:
         bot.reply_to(message, "Maaf, nama tidak dijumpai.")
     else:
-        # Combine all matching results into one reply
-        result_list = []
-        for _, row in matches.iterrows():
-            result_list.append(
-                f"Nama Murid: {row['Nama Murid']}\n"
-                f"Email: {row.iloc[1]}\n"
-                f"Password: {row.iloc[2]}"
-            )
+        # Only reply with the first (closest) match
+        row = matches.iloc[0]
 
-        reply_text = "\n\n".join(result_list)
+        reply_text = (
+            f"Nama Murid: {row['Nama Murid']}\n"
+            f"Email: {row.iloc[1]}\n"
+            f"Password: {row.iloc[2]}"
+        )
 
-        # Try sending reply, handle rate limits
         try:
             bot.reply_to(message, reply_text)
         except ApiTelegramException as e:
