@@ -2,6 +2,24 @@ import telebot
 import pandas as pd
 import time
 from telebot.apihelper import ApiTelegramException
+from flask import Flask
+import threading
+
+# === Flask minimal web server to keep Render happy ===
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running."
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = threading.Thread(target=run)
+    t.start()
+
+keep_alive()
 
 # === CONFIG ===
 TOKEN = "8201238992:AAGZeU59gksGe6y6EE3ljETNim-RpjZjCCg"
