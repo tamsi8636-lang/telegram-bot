@@ -12,14 +12,17 @@ app = Flask('')
 def home():
     return "Bot is running."
 
-def run():
+def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
-def keep_alive():
-    t = threading.Thread(target=run)
-    t.start()
+def run_bot():
+    bot.polling(skip_pending=True, none_stop=True)
 
-keep_alive()
+def keep_alive():
+    # Start Flask server in a thread
+    threading.Thread(target=run_flask).start()
+    # Start Telegram polling in another thread
+    threading.Thread(target=run_bot).start()
 
 # === CONFIG ===
 TOKEN = "8201238992:AAGZeU59gksGe6y6EE3ljETNim-RpjZjCCg"
@@ -79,6 +82,6 @@ def send_info(message):
                 time.sleep(retry_after)
                 bot.reply_to(message, reply_text)
 
-# === START BOT ===
-print("🚀 Bot is running...")
-bot.polling(skip_pending=True, none_stop=True)
+# === START EVERYTHING ===
+print("🚀 Starting bot and web server...")
+keep_alive()
