@@ -6,7 +6,7 @@ from flask import Flask
 import threading
 import logging
 
-# Setup logging
+# Setup logging to show info level logs with timestamps
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -22,24 +22,8 @@ def home():
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
-# Robust polling with retry loop
 def run_bot():
-    while True:
-        try:
-            logging.info("Starting bot polling...")
-            bot.polling(skip_pending=True, none_stop=True)
-        except ApiTelegramException as e:
-            # Handle Telegram API exceptions like rate limiting
-            if e.error_code == 429:
-                retry_after = int(e.result_json['parameters']['retry_after'])
-                logging.warning(f"Rate limit hit. Sleeping for {retry_after} seconds.")
-                time.sleep(retry_after)
-            else:
-                logging.error(f"Telegram API error: {e}")
-                time.sleep(5)  # wait a bit before retrying
-        except Exception as e:
-            logging.error(f"Unexpected error: {e}")
-            time.sleep(5)  # wait a bit before retrying
+    bot.polling(skip_pending=True, none_stop=True)
 
 def keep_alive():
     threading.Thread(target=run_flask).start()
@@ -71,37 +55,43 @@ def send_welcome(message):
 
 @bot.message_handler(func=lambda message: True)
 def send_info(message):
-    logging.info(f"Received message: {message.text} from {message.from_user.username} ({message.from_user.id})")
-    search_name = message.text.strip().upper()
+    try:
+        logging.info(f"Received message: '{message.text}' from {message.from_user.username} ({message.from_user.id})")
+        search_name = message.text.strip().upper()
+        logging.info(f"Searching for name: '{search_name}'")
 
-    if df.empty:
-        logging.warning("Excel data is empty!")
-        bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
-        return
+        if df.empty:
+            logging.warning("Excel data is empty!")
+            bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
+            return
 
-    matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
+        matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
+        logging.info(f"Matches found:\n{matches[['Nama Murid']]}")
 
-    if matches.empty:
-        logging.info("No matching name found.")
-        bot.reply_to(message, "Maaf, nama tidak dijumpai.")
-    else:
-        row = matches.iloc[0]
+        if matches.empty:
+            logging.info("No matching name found.")
+            bot.reply_to(message, "Maaf, nama tidak dijumpai.")
+        else:
+            row = matches.iloc[0]
 
-        reply_text = (
-            f"Nama Murid: {row['Nama Murid']}\n"
-            f"Email: {row.iloc[1]}\n"
-            f"Password: {row.iloc[2]}"
-        )
+            reply_text = (
+                f"Nama Murid: {row['Nama Murid']}\n"
+                f"Email: {row.iloc[1]}\n"
+                f"Password: {row.iloc[2]}"
+            )
 
-        try:
-            bot.reply_to(message, reply_text)
-            logging.info(f"Replied with data for {row['Nama Murid']}")
-        except ApiTelegramException as e:
-            if e.error_code == 429:
-                retry_after = int(e.result_json['parameters']['retry_after'])
-                logging.warning(f"⏳ Rate limit hit, retrying after {retry_after}s")
-                time.sleep(retry_after)
+            try:
                 bot.reply_to(message, reply_text)
+                logging.info(f"Replied with data for {row['Nama Murid']}")
+            except ApiTelegramException as e:
+                if e.error_code == 429:
+                    retry_after = int(e.result_json['parameters']['retry_after'])
+                    logging.warning(f"⏳ Rate limit hit, retrying after {retry_after}s")
+                    time.sleep(retry_after)
+                    bot.reply_to(message, reply_text)
+    except Exception as e:
+        logging.error(f"Error in send_info handler: {e}")
+        bot.reply_to(message, "Maaf, berlaku ralat dalam sistem.")
 
 # === START EVERYTHING ===
 logging.info("🚀 Starting bot and web server...")
