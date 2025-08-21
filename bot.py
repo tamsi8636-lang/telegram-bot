@@ -1,170 +1,134 @@
+import os
 import telebot
 import pandas as pd
-import time
-from telebot.apihelper import ApiTelegramException
-from flask import Flask
-import threading
-import logging
-import os
-
-# === Logging setup ===
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-# === Flask minimal web server (untuk Render) ===
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is running."
-
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)
-
-def run_bot():
-    bot.polling(skip_pending=True, none_stop=True)
-
-def keep_alive():
-    threading.Thread(target=run_flask).start()
-    threading.Thread(target=run_bot).start()
+from flask import Flask, request
+from datetime import datetime
 
 # === CONFIG ===
-TOKEN = os.environ.get("BOT_TOKEN")
-EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
-
-if not TOKEN:
-    logging.error("❌ BOT_TOKEN tidak dijumpai dalam environment variables!")
-    exit(1)
-
+TOKEN = os.environ.get("BOT_TOKEN")  # Token bot dari @BotFather
 bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
-# === SET COMMAND MENU (susunan baru) ===
-bot.set_my_commands([
-    telebot.types.BotCommand("start", "🚀 Mula gunakan bot"),
-    telebot.types.BotCommand("help", "📌 Lihat senarai arahan"),
-    telebot.types.BotCommand("delima", "🌐 Akses laman rasmi DELIMa KPM"),
-    telebot.types.BotCommand("ains", "📖 Akses sistem NILAM (AINS)"),
-    telebot.types.BotCommand("resetpassword", "🔑 Panduan reset kata laluan DELIMa"),
-])
-
-# === LOAD EXCEL ===
+# === LOAD DATA EXCEL ===
 try:
-    df = pd.read_excel(EXCEL_FILE)
-    df['Nama Murid'] = df['Nama Murid'].astype(str).str.strip().str.upper()
-    logging.info("✅ Excel loaded successfully")
-except FileNotFoundError:
-    logging.error("❌ Excel file not found. Make sure it's in the same folder.")
+    df = pd.read_excel("data.xlsx")  # Fail Excel mesti ada dalam server
+except Exception as e:
+    print("⚠️ Gagal buka Excel:", e)
     df = pd.DataFrame()
 
-# === HANDLERS ===
+# Simpan masa bot mula
+start_time = datetime.now()
+
+
+# === COMMAND HANDLER ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    logging.info(f"Received /start from {message.from_user.username} ({message.from_user.id})")
-    bot.reply_to(
-        message,
-        "👋 Selamat datang ke sistem bantuan *DELIMa KPM*.\n\n"
-        "Sila isi *nama penuh murid* dan hantar.\n"
-        "⚠️ Pastikan tiada kesalahan ejaan pada nama.",
-        parse_mode="Markdown"
-    )
+    bot.reply_to(message,
+                 "👋 Hai! Selamat datang ke *Bot Sokongan*.\n\n"
+                 "Guna menu atau taip arahan berikut:\n"
+                 "/help – Bantuan\n"
+                 "/delima – Portal DELIMa KPM\n"
+                 "/ains – Advanced Integrated NILAM System (AINS)\n"
+                 "/resetpassword – Panduan reset kata laluan\n"
+                 "/status – Semak status bot",
+                 parse_mode="Markdown")
+
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
-    help_text = (
-        "📌 *Senarai arahan tersedia:*\n\n"
-        "🚀 /start - Mula gunakan bot\n"
-        "📌 /help - Lihat senarai arahan\n"
-        "🌐 /delima - Akses laman rasmi DELIMa KPM\n"
-        "📖 /ains - Akses sistem NILAM (AINS)\n"
-        "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n\n"
-        "✍️ Untuk semakan, sila hantar *nama penuh murid*."
-    )
-    bot.reply_to(message, help_text, parse_mode="Markdown")
+    bot.reply_to(message,
+                 "ℹ️ *Senarai arahan yang tersedia:*\n\n"
+                 "➡️ /start – Mula semula bot\n"
+                 "➡️ /help – Senarai arahan\n"
+                 "➡️ /delima – Portal DELIMa KPM\n"
+                 "➡️ /ains – Advanced Integrated NILAM System (AINS)\n"
+                 "➡️ /resetpassword – Panduan reset kata laluan\n"
+                 "➡️ /status – Semak status bot",
+                 parse_mode="Markdown")
+
 
 @bot.message_handler(commands=['delima'])
-def send_delima_link(message):
-    markup = telebot.types.InlineKeyboardMarkup()
-    markup.add(telebot.types.InlineKeyboardButton("🌐 Buka DELIMa", url="https://d2.delima.edu.my/"))
-    bot.reply_to(
-        message,
-        "🌐 Akses laman rasmi DELIMa KPM di pautan berikut:",
-        reply_markup=markup
-    )
+def send_delima(message):
+    bot.reply_to(message,
+                 "🌐 Klik pautan untuk akses *DELIMa KPM*:\n"
+                 "👉 https://idp.iam.moe.gov.my\n",
+                 parse_mode="Markdown")
+
 
 @bot.message_handler(commands=['ains'])
-def send_ains_link(message):
-    markup = telebot.types.InlineKeyboardMarkup()
-    markup.add(telebot.types.InlineKeyboardButton("📖 Buka AINS", url="https://ains.moe.gov.my/login?returnUrl=/"))
-    bot.reply_to(
-        message,
-        "📖 Akses *Advanced Integrated NILAM System (AINS)* di pautan berikut:",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+def send_ains(message):
+    bot.reply_to(message,
+                 "📖 Klik pautan untuk akses *Advanced Integrated NILAM System (AINS)*:\n"
+                 "👉 https://ains.moe.gov.my/login?returnUrl=/",
+                 parse_mode="Markdown")
+
 
 @bot.message_handler(commands=['resetpassword'])
-def send_reset_password(message):
-    reply_text = (
-        "🔑 *Peringatan Reset Kata Laluan DELIMa KPM*\n\n"
-        "Untuk menetapkan semula kata laluan, sila hubungi *guru kelas anak anda* "
-        "untuk mendapatkan bantuan rasmi.\n\n"
-        "📂 Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik "
-        "supaya tidak menghadapi masalah akses pada masa hadapan."
+def send_reset(message):
+    bot.reply_to(message,
+                 "🔑 *Panduan Reset Kata Laluan Akaun Google Education (MOE):*\n\n"
+                 "1️⃣ Pergi ke pautan reset: https://password.moe.gov.my\n"
+                 "2️⃣ Masukkan ID pengguna (contoh: nama@moe-dl.edu.my)\n"
+                 "3️⃣ Ikut arahan di skrin untuk tetapkan semula kata laluan\n\n"
+                 "⚠️ Ingatkan murid/ibu bapa agar tidak melupakan kata laluan lagi.",
+                 parse_mode="Markdown")
+
+
+@bot.message_handler(commands=['status'])
+def send_status(message):
+    now = datetime.now()
+    jumlah = len(df) if not df.empty else 0
+    uptime = now - start_time
+
+    # Format uptime: hari, jam, minit, saat
+    days = uptime.days
+    hours, remainder = divmod(uptime.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    uptime_parts = []
+    if days > 0:
+        uptime_parts.append(f"{days} hari")
+    if hours > 0:
+        uptime_parts.append(f"{hours} jam")
+    if minutes > 0:
+        uptime_parts.append(f"{minutes} minit")
+    if seconds > 0:
+        uptime_parts.append(f"{seconds} saat")
+
+    uptime_str = " ".join(uptime_parts) if uptime_parts else "0 saat"
+
+    status_text = (
+        "📊 *Maklumat Status Sistem Bot*\n\n"
+        f"✅ Status Bot: Aktif & Beroperasi\n"
+        f"👥 Jumlah murid dalam rekod: *{jumlah} orang*\n"
+        f"🖥️ Server Flask: *Running*\n"
+        f"⏱️ Masa semasa: {now.strftime('%d/%m/%Y %H:%M:%S')}\n"
+        f"⏳ Uptime: {uptime_str}\n\n"
+        "🔧 *Maklumat Tambahan:*\n"
+        "📂 Source code: *GitHub*\n"
+        "💻 Coding language: *Python*\n"
+        "☁️ Server: *Render*\n"
+        "📡 Status monitor: *UpTimeRobot*\n"
+        "🌐 Status page: [Klik di sini](https://stats.uptimerobot.com/k6aooeDaUq)"
     )
-    bot.reply_to(message, reply_text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: True)
-def send_info(message):
-    try:
-        logging.info(f"Received message: '{message.text}' from {message.from_user.username} ({message.from_user.id})")
-        search_name = message.text.strip().upper()
-        logging.info(f"Searching for name: '{search_name}'")
+    bot.reply_to(message, status_text, parse_mode="Markdown")
 
-        # Jika mesej mengandungi "password" atau "kata laluan"
-        if "PASSWORD" in search_name or "KATA LALUAN" in search_name:
-            bot.reply_to(
-                message,
-                "🔑 Untuk isu kata laluan, sila hubungi *guru kelas anak anda* bagi bantuan reset.\n\n"
-                "📂 Pihak sekolah mengingatkan agar kata laluan sentiasa disimpan dengan baik.",
-                parse_mode="Markdown"
-            )
-            return
 
-        if df.empty:
-            logging.warning("Excel data is empty!")
-            bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
-            return
+# === FLASK WEBHOOK ===
+@app.route("/" + TOKEN, methods=['POST'])
+def getMessage():
+    json_str = request.get_data().decode("UTF-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "OK", 200
 
-        matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
-        logging.info(f"Matches found:\n{matches[['Nama Murid']]}")
 
-        if matches.empty:
-            logging.info("No matching name found.")
-            bot.reply_to(message, "⚠️ Maaf, nama tidak dijumpai dalam rekod.")
-        else:
-            row = matches.iloc[0]
+@app.route("/")
+def webhook():
+    return "Bot is running with Flask!", 200
 
-            reply_text = (
-                f"👤 Nama Murid: {row['Nama Murid']}\n"
-                f"📧 Email: {row.iloc[1]}\n"
-                f"🔑 Password: {row.iloc[2]}"
-            )
 
-            try:
-                bot.reply_to(message, reply_text)
-                logging.info(f"Replied with data for {row['Nama Murid']}")
-            except ApiTelegramException as e:
-                if e.error_code == 429:
-                    retry_after = int(e.result_json['parameters']['retry_after'])
-                    logging.warning(f"⏳ Rate limit hit, retrying after {retry_after}s")
-                    time.sleep(retry_after)
-                    bot.reply_to(message, reply_text)
-    except Exception as e:
-        logging.error(f"Error in send_info handler: {e}")
-        bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
-
-# === START EVERYTHING ===
-logging.info("🚀 Starting bot and web server...")
-keep_alive()
+# === RUN ===
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
