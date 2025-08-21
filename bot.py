@@ -46,6 +46,7 @@ bot.set_my_commands([
     telebot.types.BotCommand("help", "📌 Lihat senarai arahan"),
     telebot.types.BotCommand("delima", "🌐 Akses laman rasmi DELIMa KPM"),
     telebot.types.BotCommand("resetpassword", "🔑 Panduan reset kata laluan DELIMa"),
+    telebot.types.BotCommand("ains", "📖 Akses sistem NILAM (AINS)"),
 ])
 
 # === LOAD EXCEL ===
@@ -76,17 +77,22 @@ def send_help(message):
         "🚀 /start - Mula gunakan bot\n"
         "📌 /help - Lihat senarai arahan\n"
         "🌐 /delima - Akses laman rasmi DELIMa KPM\n"
-        "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n\n"
+        "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n"
+        "📖 /ains - Akses sistem NILAM (AINS)\n\n"
         "✍️ Untuk semakan, sila hantar *nama penuh murid*."
     )
     bot.reply_to(message, help_text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['delima'])
 def send_delima_link(message):
+    markup = telebot.types.InlineKeyboardMarkup()
+    btn = telebot.types.InlineKeyboardButton("🌐 Buka DELIMa KPM", url="https://d2.delima.edu.my/")
+    markup.add(btn)
     bot.reply_to(
         message,
-        "🌐 Akses laman rasmi DELIMa KPM di pautan berikut:\n"
-        "👉 https://d2.delima.edu.my/"
+        "🌐 Akses laman rasmi *DELIMa KPM* dengan klik butang di bawah:",
+        parse_mode="Markdown",
+        reply_markup=markup
     )
 
 @bot.message_handler(commands=['resetpassword'])
@@ -99,6 +105,18 @@ def send_reset_password(message):
         "supaya tidak menghadapi masalah akses pada masa hadapan."
     )
     bot.reply_to(message, reply_text, parse_mode="Markdown")
+
+@bot.message_handler(commands=['ains'])
+def send_ains_link(message):
+    markup = telebot.types.InlineKeyboardMarkup()
+    btn = telebot.types.InlineKeyboardButton("📖 Buka AINS", url="https://ains.moe.gov.my/login?returnUrl=/")
+    markup.add(btn)
+    bot.reply_to(
+        message,
+        "📖 Akses sistem *Advanced Integrated NILAM System (AINS)* dengan klik butang di bawah:",
+        parse_mode="Markdown",
+        reply_markup=markup
+    )
 
 @bot.message_handler(func=lambda message: True)
 def send_info(message):
