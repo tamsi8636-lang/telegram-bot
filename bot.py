@@ -115,12 +115,12 @@ def send_reset_password(message):
 # === STATUS SERVER ===
 @bot.message_handler(commands=['status'])
 def send_status(message):
-    jumlah_murid = len(df) if not df.empty else 0
+    jumlah_orang = len(df) if not df.empty else 0
     uptime_url = "https://stats.uptimerobot.com/k6aooeDaUq"
 
     reply_text = (
         "📊 *Status Server & Data Bot*\n\n"
-        f"👥 Jumlah rekod murid: *{jumlah_murid}*\n"
+        f"👥 Jumlah rekod orang: *{jumlah_orang}*\n"
         "💻 Source code: Github\n"
         "🐍 Coding language: Python\n"
         "☁️ Server: Render\n"
