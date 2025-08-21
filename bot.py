@@ -40,7 +40,7 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# === SET COMMAND MENU ===
+# === SET COMMAND MENU (ikut susunan baru) ===
 bot.set_my_commands([
     telebot.types.BotCommand("start", "🚀 Mula gunakan bot"),
     telebot.types.BotCommand("help", "📌 Lihat senarai arahan"),
