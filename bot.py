@@ -6,7 +6,6 @@ from flask import Flask
 import threading
 import logging
 import os
-import requests
 
 # === Logging setup ===
 logging.basicConfig(
@@ -34,6 +33,7 @@ def keep_alive():
 # === CONFIG ===
 TOKEN = os.environ.get("BOT_TOKEN")
 EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
+START_TIME = time.time()  # simpan masa mula running
 
 if not TOKEN:
     logging.error("❌ BOT_TOKEN tidak dijumpai dalam environment variables!")
@@ -41,14 +41,14 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# === SET COMMAND MENU (susunan baru + status) ===
+# === SET COMMAND MENU (susunan baru) ===
 bot.set_my_commands([
     telebot.types.BotCommand("start", "🚀 Mula gunakan bot"),
     telebot.types.BotCommand("help", "📌 Lihat senarai arahan"),
     telebot.types.BotCommand("delima", "🌐 Akses laman rasmi DELIMa KPM"),
     telebot.types.BotCommand("ains", "📖 Akses sistem NILAM (AINS)"),
     telebot.types.BotCommand("resetpassword", "🔑 Panduan reset kata laluan DELIMa"),
-    telebot.types.BotCommand("status", "📊 Status server & data bot"),
+    telebot.types.BotCommand("status", "📊 Status server & rekod"),
 ])
 
 # === LOAD EXCEL ===
@@ -80,7 +80,7 @@ def send_help(message):
         "🌐 /delima - Akses laman rasmi DELIMa KPM\n"
         "📖 /ains - Akses sistem NILAM (AINS)\n"
         "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n"
-        "📊 /status - Semak status bot & server\n\n"
+        "📊 /status - Status server & rekod\n\n"
         "✍️ Untuk semakan, sila hantar *nama penuh murid*."
     )
     bot.reply_to(message, help_text, parse_mode="Markdown")
@@ -108,28 +108,44 @@ def send_reset_password(message):
         "🔑 *Peringatan Reset Kata Laluan DELIMa KPM*\n\n"
         "Untuk menetapkan semula kata laluan, sila hubungi *guru kelas anak anda* "
         "untuk mendapatkan bantuan rasmi.\n\n"
-        "📂 Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik."
+        "📂 Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik "
+        "supaya tidak menghadapi masalah akses pada masa hadapan."
     )
     bot.reply_to(message, reply_text, parse_mode="Markdown")
 
-# === STATUS SERVER ===
 @bot.message_handler(commands=['status'])
 def send_status(message):
-    jumlah_orang = len(df) if not df.empty else 0
-    uptime_url = "https://stats.uptimerobot.com/k6aooeDaUq"
+    total_records = len(df) if not df.empty else 0
+    uptime_seconds = int(time.time() - START_TIME)
+
+    days, remainder = divmod(uptime_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    uptime_parts = []
+    if days > 0:
+        uptime_parts.append(f"{days} hari")
+    if hours > 0:
+        uptime_parts.append(f"{hours} jam")
+    if minutes > 0:
+        uptime_parts.append(f"{minutes} minit")
+    if seconds > 0:
+        uptime_parts.append(f"{seconds} saat")
+
+    uptime_text = " ".join(uptime_parts)
 
     reply_text = (
-        "📊 *Status Server & Data Bot*\n\n"
-        f"👥 Jumlah rekod orang: *{jumlah_orang}*\n"
-        "💻 Source code: Github\n"
-        "🐍 Coding language: Python\n"
-        "☁️ Server: Render\n"
+        "📊 *Status Server & Bot*\n\n"
+        f"🚀 Bot sedang berjalan\n"
+        f"👥 Jumlah rekod orang: {total_records}\n"
+        f"⏳ Server aktif: {uptime_text}\n\n"
+        "🌍 Source code: Github\n"
+        "💻 Server: Render\n"
         "📡 Status monitor: UpTimeRobot\n"
-        f"📈 Status page: [Klik sini]({uptime_url})"
+        "📊 Status page: https://stats.uptimerobot.com/k6aooeDaUq"
     )
     bot.reply_to(message, reply_text, parse_mode="Markdown")
 
-# === HANDLER UNTUK NAMA MURID ===
 @bot.message_handler(func=lambda message: True)
 def send_info(message):
     try:
@@ -139,7 +155,7 @@ def send_info(message):
             bot.reply_to(
                 message,
                 "🔑 Untuk isu kata laluan, sila hubungi *guru kelas anak anda* bagi bantuan reset.\n\n"
-                "📂 Kata laluan perlu disimpan dengan baik.",
+                "📂 Pihak sekolah mengingatkan agar kata laluan sentiasa disimpan dengan baik.",
                 parse_mode="Markdown"
             )
             return
@@ -160,6 +176,7 @@ def send_info(message):
                 f"🔑 Password: {row.iloc[2]}"
             )
             bot.reply_to(message, reply_text)
+
     except Exception as e:
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
