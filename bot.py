@@ -42,10 +42,10 @@ bot = telebot.TeleBot(TOKEN)
 
 # === SET COMMAND MENU ===
 bot.set_my_commands([
-    telebot.types.BotCommand("start", "Mula gunakan bot"),
-    telebot.types.BotCommand("help", "Lihat senarai arahan"),
-    telebot.types.BotCommand("delima", "Akses laman rasmi DELIMa KPM"),
-    telebot.types.BotCommand("resetpassword", "Panduan reset kata laluan DELIMa"),
+    telebot.types.BotCommand("start", "🚀 Mula gunakan bot"),
+    telebot.types.BotCommand("help", "📌 Lihat senarai arahan"),
+    telebot.types.BotCommand("delima", "🌐 Akses laman rasmi DELIMa KPM"),
+    telebot.types.BotCommand("resetpassword", "🔑 Panduan reset kata laluan DELIMa"),
 ])
 
 # === LOAD EXCEL ===
@@ -63,20 +63,21 @@ def send_welcome(message):
     logging.info(f"Received /start from {message.from_user.username} ({message.from_user.id})")
     bot.reply_to(
         message,
-        "Selamat datang ke sistem bantuan DELIMa KPM.\n\n"
-        "Sila isi nama penuh murid dan hantar. "
-        "Pastikan tiada kesalahan ejaan pada nama."
+        "👋 Selamat datang ke sistem bantuan *DELIMa KPM*.\n\n"
+        "Sila isi *nama penuh murid* dan hantar.\n"
+        "⚠️ Pastikan tiada kesalahan ejaan pada nama.",
+        parse_mode="Markdown"
     )
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
     help_text = (
-        "📌 Senarai arahan yang tersedia:\n\n"
-        "/start - Mula gunakan bot\n"
-        "/help - Lihat senarai arahan\n"
-        "/delima - Akses laman rasmi DELIMa KPM\n"
-        "/resetpassword - Panduan reset kata laluan DELIMa\n\n"
-        "Untuk semakan, sila hantar *nama penuh murid*."
+        "📌 *Senarai arahan tersedia:*\n\n"
+        "🚀 /start - Mula gunakan bot\n"
+        "📌 /help - Lihat senarai arahan\n"
+        "🌐 /delima - Akses laman rasmi DELIMa KPM\n"
+        "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n\n"
+        "✍️ Untuk semakan, sila hantar *nama penuh murid*."
     )
     bot.reply_to(message, help_text, parse_mode="Markdown")
 
@@ -85,7 +86,7 @@ def send_delima_link(message):
     bot.reply_to(
         message,
         "🌐 Akses laman rasmi DELIMa KPM di pautan berikut:\n"
-        "https://d2.delima.edu.my/"
+        "👉 https://d2.delima.edu.my/"
     )
 
 @bot.message_handler(commands=['resetpassword'])
@@ -94,7 +95,7 @@ def send_reset_password(message):
         "🔑 *Peringatan Reset Kata Laluan DELIMa KPM*\n\n"
         "Untuk menetapkan semula kata laluan, sila hubungi *guru kelas anak anda* "
         "untuk mendapatkan bantuan rasmi.\n\n"
-        "Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik "
+        "📂 Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik "
         "supaya tidak menghadapi masalah akses pada masa hadapan."
     )
     bot.reply_to(message, reply_text, parse_mode="Markdown")
@@ -110,8 +111,9 @@ def send_info(message):
         if "PASSWORD" in search_name or "KATA LALUAN" in search_name:
             bot.reply_to(
                 message,
-                "Untuk isu kata laluan, sila hubungi guru kelas anak anda bagi bantuan reset.\n\n"
-                "Pihak sekolah mengingatkan agar kata laluan sentiasa disimpan dengan baik."
+                "🔑 Untuk isu kata laluan, sila hubungi *guru kelas anak anda* bagi bantuan reset.\n\n"
+                "📂 Pihak sekolah mengingatkan agar kata laluan sentiasa disimpan dengan baik.",
+                parse_mode="Markdown"
             )
             return
 
@@ -125,14 +127,14 @@ def send_info(message):
 
         if matches.empty:
             logging.info("No matching name found.")
-            bot.reply_to(message, "Maaf, nama tidak dijumpai dalam rekod.")
+            bot.reply_to(message, "⚠️ Maaf, nama tidak dijumpai dalam rekod.")
         else:
             row = matches.iloc[0]
 
             reply_text = (
-                f"Nama Murid: {row['Nama Murid']}\n"
-                f"Email: {row.iloc[1]}\n"
-                f"Password: {row.iloc[2]}"
+                f"👤 Nama Murid: {row['Nama Murid']}\n"
+                f"📧 Email: {row.iloc[1]}\n"
+                f"🔑 Password: {row.iloc[2]}"
             )
 
             try:
@@ -146,7 +148,7 @@ def send_info(message):
                     bot.reply_to(message, reply_text)
     except Exception as e:
         logging.error(f"Error in send_info handler: {e}")
-        bot.reply_to(message, "Maaf, berlaku ralat dalam sistem.")
+        bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
 # === START EVERYTHING ===
 logging.info("🚀 Starting bot and web server...")
