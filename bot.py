@@ -6,6 +6,7 @@ from flask import Flask
 import threading
 import logging
 import os
+import requests
 
 # === Logging setup ===
 logging.basicConfig(
@@ -40,13 +41,14 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# === SET COMMAND MENU (susunan baru) ===
+# === SET COMMAND MENU (susunan baru + status) ===
 bot.set_my_commands([
     telebot.types.BotCommand("start", "🚀 Mula gunakan bot"),
     telebot.types.BotCommand("help", "📌 Lihat senarai arahan"),
     telebot.types.BotCommand("delima", "🌐 Akses laman rasmi DELIMa KPM"),
     telebot.types.BotCommand("ains", "📖 Akses sistem NILAM (AINS)"),
     telebot.types.BotCommand("resetpassword", "🔑 Panduan reset kata laluan DELIMa"),
+    telebot.types.BotCommand("status", "📊 Status server & data bot"),
 ])
 
 # === LOAD EXCEL ===
@@ -61,7 +63,6 @@ except FileNotFoundError:
 # === HANDLERS ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    logging.info(f"Received /start from {message.from_user.username} ({message.from_user.id})")
     bot.reply_to(
         message,
         "👋 Selamat datang ke sistem bantuan *DELIMa KPM*.\n\n"
@@ -78,7 +79,8 @@ def send_help(message):
         "📌 /help - Lihat senarai arahan\n"
         "🌐 /delima - Akses laman rasmi DELIMa KPM\n"
         "📖 /ains - Akses sistem NILAM (AINS)\n"
-        "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n\n"
+        "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n"
+        "📊 /status - Semak status bot & server\n\n"
         "✍️ Untuk semakan, sila hantar *nama penuh murid*."
     )
     bot.reply_to(message, help_text, parse_mode="Markdown")
@@ -87,11 +89,7 @@ def send_help(message):
 def send_delima_link(message):
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("🌐 Buka DELIMa", url="https://d2.delima.edu.my/"))
-    bot.reply_to(
-        message,
-        "🌐 Akses laman rasmi DELIMa KPM di pautan berikut:",
-        reply_markup=markup
-    )
+    bot.reply_to(message, "🌐 Akses laman rasmi DELIMa KPM di pautan berikut:", reply_markup=markup)
 
 @bot.message_handler(commands=['ains'])
 def send_ains_link(message):
@@ -110,57 +108,58 @@ def send_reset_password(message):
         "🔑 *Peringatan Reset Kata Laluan DELIMa KPM*\n\n"
         "Untuk menetapkan semula kata laluan, sila hubungi *guru kelas anak anda* "
         "untuk mendapatkan bantuan rasmi.\n\n"
-        "📂 Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik "
-        "supaya tidak menghadapi masalah akses pada masa hadapan."
+        "📂 Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik."
     )
     bot.reply_to(message, reply_text, parse_mode="Markdown")
 
+# === STATUS SERVER ===
+@bot.message_handler(commands=['status'])
+def send_status(message):
+    jumlah_murid = len(df) if not df.empty else 0
+    uptime_url = "https://stats.uptimerobot.com/k6aooeDaUq"
+
+    reply_text = (
+        "📊 *Status Server & Data Bot*\n\n"
+        f"👥 Jumlah rekod murid: *{jumlah_murid}*\n"
+        "💻 Source code: Github\n"
+        "🐍 Coding language: Python\n"
+        "☁️ Server: Render\n"
+        "📡 Status monitor: UpTimeRobot\n"
+        f"📈 Status page: [Klik sini]({uptime_url})"
+    )
+    bot.reply_to(message, reply_text, parse_mode="Markdown")
+
+# === HANDLER UNTUK NAMA MURID ===
 @bot.message_handler(func=lambda message: True)
 def send_info(message):
     try:
-        logging.info(f"Received message: '{message.text}' from {message.from_user.username} ({message.from_user.id})")
         search_name = message.text.strip().upper()
-        logging.info(f"Searching for name: '{search_name}'")
 
-        # Jika mesej mengandungi "password" atau "kata laluan"
         if "PASSWORD" in search_name or "KATA LALUAN" in search_name:
             bot.reply_to(
                 message,
                 "🔑 Untuk isu kata laluan, sila hubungi *guru kelas anak anda* bagi bantuan reset.\n\n"
-                "📂 Pihak sekolah mengingatkan agar kata laluan sentiasa disimpan dengan baik.",
+                "📂 Kata laluan perlu disimpan dengan baik.",
                 parse_mode="Markdown"
             )
             return
 
         if df.empty:
-            logging.warning("Excel data is empty!")
             bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
             return
 
         matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
-        logging.info(f"Matches found:\n{matches[['Nama Murid']]}")
 
         if matches.empty:
-            logging.info("No matching name found.")
             bot.reply_to(message, "⚠️ Maaf, nama tidak dijumpai dalam rekod.")
         else:
             row = matches.iloc[0]
-
             reply_text = (
                 f"👤 Nama Murid: {row['Nama Murid']}\n"
                 f"📧 Email: {row.iloc[1]}\n"
                 f"🔑 Password: {row.iloc[2]}"
             )
-
-            try:
-                bot.reply_to(message, reply_text)
-                logging.info(f"Replied with data for {row['Nama Murid']}")
-            except ApiTelegramException as e:
-                if e.error_code == 429:
-                    retry_after = int(e.result_json['parameters']['retry_after'])
-                    logging.warning(f"⏳ Rate limit hit, retrying after {retry_after}s")
-                    time.sleep(retry_after)
-                    bot.reply_to(message, reply_text)
+            bot.reply_to(message, reply_text)
     except Exception as e:
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
