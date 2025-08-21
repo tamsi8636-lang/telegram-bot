@@ -68,13 +68,32 @@ def send_welcome(message):
         "Sila isi nama penuh murid dan hantar, pastikan tiada kesalahan ejaan pada nama."
     )
 
-# Handler khas untuk detect perkataan "password" atau "kata laluan"
-@bot.message_handler(func=lambda message: any(word in message.text.lower() for word in ["password", "kata laluan"]))
+@bot.message_handler(commands=['help'])
+def send_help(message):
+    logging.info(f"Received /help from {message.from_user.username} ({message.from_user.id})")
+    help_text = (
+        "**Panduan Penggunaan Bot**\n"
+        "1. Hantar nama penuh murid untuk semakan.\n"
+        "2. Pastikan tiada kesalahan ejaan pada nama.\n"
+        "3. Jika berkaitan kata laluan, sila hubungi guru kelas untuk bantuan set semula.\n"
+        "4. Gunakan arahan /start untuk mula semula."
+    )
+    bot.reply_to(message, help_text, parse_mode="Markdown")
+
+# Keyword untuk detect mesej berkaitan password
+PASSWORD_KEYWORDS = [
+    "password", "kata laluan",
+    "lupa password", "lupa kata laluan",
+    "reset password", "reset kata laluan"
+]
+
+# Handler khas untuk detect mesej berkaitan password
+@bot.message_handler(func=lambda message: any(keyword in message.text.lower() for keyword in PASSWORD_KEYWORDS))
 def handle_password(message):
     logging.info(f"Password help requested by {message.from_user.username} ({message.from_user.id})")
     bot.reply_to(
         message,
-        "Sekiranya anda menghadapi masalah berkaitan **kata laluan**, sila hubungi guru kelas untuk mendapatkan bantuan dan proses set semula kata laluan."
+        "Sekiranya anda menghadapi masalah berkaitan kata laluan, sila hubungi guru kelas untuk mendapatkan bantuan dan proses set semula kata laluan."
     )
 
 # Handler default untuk carian nama
