@@ -2,7 +2,7 @@ import telebot
 import pandas as pd
 import time
 from telebot.apihelper import ApiTelegramException
-from flask import Flask
+from flask import Flask, request
 import threading
 import logging
 
@@ -23,14 +23,18 @@ def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
 def run_bot():
-    """Run Telegram bot with auto-reconnect on error."""
+    """Run Telegram bot with auto-reconnect using exponential backoff."""
+    delay = 5
     while True:
         try:
             logging.info("🚀 Starting polling...")
             bot.polling(skip_pending=True, none_stop=True, timeout=60, long_polling_timeout=60)
         except Exception as e:
-            logging.error(f"Polling error: {e}. Restarting in 5s...")
-            time.sleep(5)  # tunggu sebelum restart polling
+            logging.error(f"❌ Polling error: {e}. Restarting in {delay}s...")
+            time.sleep(delay)
+            delay = min(delay * 2, 60)  # gandakan delay sampai max 60s
+        else:
+            delay = 5  # reset delay kalau berjaya run
 
 def keep_alive():
     threading.Thread(target=run_flask).start()
@@ -43,13 +47,17 @@ EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
 bot = telebot.TeleBot(TOKEN)
 
 # === LOAD EXCEL ===
-try:
-    df = pd.read_excel(EXCEL_FILE)
-    df['Nama Murid'] = df['Nama Murid'].astype(str).str.strip().str.upper()
-    logging.info("✅ Excel loaded successfully")
-except FileNotFoundError:
-    logging.error("❌ Excel file not found. Make sure it's in the same folder.")
-    df = pd.DataFrame()
+def load_excel():
+    try:
+        df = pd.read_excel(EXCEL_FILE)
+        df['Nama Murid'] = df['Nama Murid'].astype(str).str.strip().str.upper()
+        logging.info("✅ Excel loaded successfully")
+        return df
+    except FileNotFoundError:
+        logging.error("❌ Excel file not found. Make sure it's in the same folder.")
+        return pd.DataFrame()
+
+df = load_excel()
 
 # === HANDLERS ===
 @bot.message_handler(commands=['start'])
