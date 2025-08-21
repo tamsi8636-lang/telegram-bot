@@ -1,4 +1,3 @@
-import os
 import telebot
 import pandas as pd
 import time
@@ -6,6 +5,7 @@ from telebot.apihelper import ApiTelegramException
 from flask import Flask
 import threading
 import logging
+import os
 
 # === Logging setup ===
 logging.basicConfig(
@@ -13,7 +13,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# === Flask server (untuk Render keep alive) ===
+# === Flask minimal web server (untuk Render) ===
 app = Flask('')
 
 @app.route('/')
@@ -31,7 +31,7 @@ def keep_alive():
     threading.Thread(target=run_bot).start()
 
 # === CONFIG ===
-TOKEN = os.environ.get("BOT_TOKEN")  # ambil dari environment variable
+TOKEN = os.environ.get("BOT_TOKEN")
 EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
 
 if not TOKEN:
@@ -39,6 +39,14 @@ if not TOKEN:
     exit(1)
 
 bot = telebot.TeleBot(TOKEN)
+
+# === SET COMMAND MENU ===
+bot.set_my_commands([
+    telebot.types.BotCommand("start", "Mula gunakan bot"),
+    telebot.types.BotCommand("help", "Lihat senarai arahan"),
+    telebot.types.BotCommand("delima", "Akses laman rasmi DELIMa KPM"),
+    telebot.types.BotCommand("resetpassword", "Panduan reset kata laluan DELIMa"),
+])
 
 # === LOAD EXCEL ===
 try:
@@ -55,51 +63,64 @@ def send_welcome(message):
     logging.info(f"Received /start from {message.from_user.username} ({message.from_user.id})")
     bot.reply_to(
         message,
-        "Selamat datang ke Chatbot DELIMa KPM.\n"
-        "Sila masukkan nama penuh murid (tanpa kesalahan ejaan) untuk mendapatkan maklumat akses."
+        "Selamat datang ke sistem bantuan DELIMa KPM.\n\n"
+        "Sila isi nama penuh murid dan hantar. "
+        "Pastikan tiada kesalahan ejaan pada nama."
     )
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
-    bot.reply_to(
-        message,
-        "📌 Senarai arahan yang tersedia:\n"
-        "/start - Mula menggunakan bot\n"
-        "/help - Senarai arahan\n"
-        "/delima - Pautan rasmi DELIMa KPM\n\n"
-        "Anda juga boleh hantar *nama penuh murid* untuk semakan maklumat."
+    help_text = (
+        "📌 Senarai arahan yang tersedia:\n\n"
+        "/start - Mula gunakan bot\n"
+        "/help - Lihat senarai arahan\n"
+        "/delima - Akses laman rasmi DELIMa KPM\n"
+        "/resetpassword - Panduan reset kata laluan DELIMa\n\n"
+        "Untuk semakan, sila hantar *nama penuh murid*."
     )
+    bot.reply_to(message, help_text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['delima'])
 def send_delima_link(message):
-    logging.info(f"Received /delima from {message.from_user.username} ({message.from_user.id})")
     bot.reply_to(
         message,
-        "Tuan/Puan boleh mengakses DELIMa KPM melalui pautan rasmi berikut:\n"
-        "🔗 https://d2.delima.edu.my/"
+        "🌐 Akses laman rasmi DELIMa KPM di pautan berikut:\n"
+        "https://d2.delima.edu.my/"
     )
+
+@bot.message_handler(commands=['resetpassword'])
+def send_reset_password(message):
+    reply_text = (
+        "🔑 *Peringatan Reset Kata Laluan DELIMa KPM*\n\n"
+        "Untuk menetapkan semula kata laluan, sila hubungi *guru kelas anak anda* "
+        "untuk mendapatkan bantuan rasmi.\n\n"
+        "Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik "
+        "supaya tidak menghadapi masalah akses pada masa hadapan."
+    )
+    bot.reply_to(message, reply_text, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
 def send_info(message):
     try:
-        text = message.text.strip().upper()
-        logging.info(f"Received message: '{text}' from {message.from_user.username} ({message.from_user.id})")
+        logging.info(f"Received message: '{message.text}' from {message.from_user.username} ({message.from_user.id})")
+        search_name = message.text.strip().upper()
+        logging.info(f"Searching for name: '{search_name}'")
 
-        # Jika mesej berkaitan password
-        if "PASSWORD" in text or "KATA LALUAN" in text:
+        # Jika mesej mengandungi "password" atau "kata laluan"
+        if "PASSWORD" in search_name or "KATA LALUAN" in search_name:
             bot.reply_to(
                 message,
-                "Bagi isu berkaitan kata laluan, sila hubungi guru kelas "
-                "untuk mendapatkan bantuan atau membuat penetapan semula kata laluan."
+                "Untuk isu kata laluan, sila hubungi guru kelas anak anda bagi bantuan reset.\n\n"
+                "Pihak sekolah mengingatkan agar kata laluan sentiasa disimpan dengan baik."
             )
             return
 
         if df.empty:
             logging.warning("Excel data is empty!")
-            bot.reply_to(message, "❌ Data tidak tersedia buat masa ini.")
+            bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
             return
 
-        matches = df[df['Nama Murid'].str.contains(text, case=False, na=False)]
+        matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
         logging.info(f"Matches found:\n{matches[['Nama Murid']]}")
 
         if matches.empty:
