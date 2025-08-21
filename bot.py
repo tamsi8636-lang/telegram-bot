@@ -23,7 +23,14 @@ def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
 def run_bot():
-    bot.polling(skip_pending=True, none_stop=True)
+    """Run Telegram bot with auto-reconnect on error."""
+    while True:
+        try:
+            logging.info("🚀 Starting polling...")
+            bot.polling(skip_pending=True, none_stop=True, timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            logging.error(f"Polling error: {e}. Restarting in 5s...")
+            time.sleep(5)  # tunggu sebelum restart polling
 
 def keep_alive():
     threading.Thread(target=run_flask).start()
