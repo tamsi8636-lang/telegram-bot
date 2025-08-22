@@ -77,14 +77,16 @@ def send_ains(message):
     bot.reply_to(message, "📝 AINS (Advanced Integrated NILAM System): https://ains.moe.gov.my/login?returnUrl=/")
 
 @bot.message_handler(commands=['resetpassword'])
-def send_reset(message):
+def send_reset_password(message):
     log_command(message, "/resetpassword")
-    bot.reply_to(
-        message,
-        "🔑 Jika anda terlupa kata laluan DELIMa, sila gunakan pautan berikut untuk reset:\n"
-        "https://idp1.moe.gov.my/resetpassword\n\n"
-        "⚠️ Ingatkan ibu bapa / penjaga supaya tidak melupakan kata laluan selepas reset."
+    reply_text = (
+        "🔑 *Peringatan Reset Kata Laluan DELIMa KPM*\n\n"
+        "Untuk menetapkan semula kata laluan, sila hubungi *guru kelas anak anda* "
+        "untuk mendapatkan bantuan rasmi.\n\n"
+        "📂 Pihak sekolah menasihatkan agar ibu bapa / penjaga menyimpan kata laluan dengan baik "
+        "supaya tidak menghadapi masalah akses pada masa hadapan."
     )
+    bot.reply_to(message, reply_text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['status'])
 def send_status(message):
