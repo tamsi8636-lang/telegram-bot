@@ -6,6 +6,7 @@ from flask import Flask
 import threading
 import logging
 import os
+import sys
 
 # === Logging setup ===
 logging.basicConfig(
@@ -180,6 +181,15 @@ def send_info(message):
     except Exception as e:
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
+
+# === AUTO RESTART SETIAP 15 MINIT ===
+def auto_restart():
+    while True:
+        time.sleep(900)  # 15 minit = 900s
+        logging.info("♻️ Restarting bot automatically (every 15 minutes)...")
+        os.execv(sys.executable, ['python'] + sys.argv)
+
+threading.Thread(target=auto_restart, daemon=True).start()
 
 # === START EVERYTHING ===
 logging.info("🚀 Starting bot and web server...")
