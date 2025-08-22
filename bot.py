@@ -5,6 +5,7 @@ import threading
 import logging
 from flask import Flask
 import telebot
+from telebot.apihelper import ApiTelegramException
 
 # === LOGGING SETUP ===
 logging.basicConfig(
@@ -120,8 +121,16 @@ def run_bot():
         try:
             logging.info("🚀 Bot polling dimulakan...")
             bot.polling(skip_pending=True, none_stop=True)
+        except ApiTelegramException as e:
+            if "409" in str(e):
+                # Conflict, tunggu 20 saat sebelum restart
+                logging.error(f"💥 Telegram API error 409 (Conflict): {e}. Restarting in 20s...")
+                time.sleep(20)
+            else:
+                logging.error(f"💥 Telegram API error: {e}. Restarting immediately...")
+                os.execv(sys.executable, ['python'] + sys.argv)
         except Exception as e:
-            logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting...")
+            logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting immediately...")
             os.execv(sys.executable, ['python'] + sys.argv)
 
 # === MAIN START ===
