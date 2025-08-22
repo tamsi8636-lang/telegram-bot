@@ -6,6 +6,7 @@ import logging
 from flask import Flask
 import telebot
 from telebot.apihelper import ApiTelegramException
+import pandas as pd
 
 # === LOGGING SETUP ===
 logging.basicConfig(
@@ -39,6 +40,16 @@ def log_message(message):
     user_id = message.from_user.id
     logging.info(f"💬 Mesej biasa dari {user} (id={user_id}): {message.text}")
 
+# === LOAD EXCEL (contoh, boleh sesuaikan) ===
+EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
+try:
+    df = pd.read_excel(EXCEL_FILE)
+    df['Nama Murid'] = df['Nama Murid'].astype(str).str.strip().str.upper()
+    logging.info("✅ Excel loaded successfully")
+except FileNotFoundError:
+    logging.error("❌ Excel file not found. Make sure it's in the same folder.")
+    df = pd.DataFrame()
+
 # === HANDLERS ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -54,27 +65,36 @@ def send_welcome(message):
 @bot.message_handler(commands=['help'])
 def send_help(message):
     log_command(message, "/help")
-    bot.reply_to(
-        message,
-        "📌 Senarai arahan:\n"
-        "/start - Mula semula bot\n"
-        "/help - Bantuan\n"
-        "/delima - Pautan ke portal DELIMa\n"
-        "/ains - Pautan ke AINS\n"
-        "/resetpassword - Panduan reset kata laluan\n"
-        "/status - Status server",
-        parse_mode="Markdown"
+    help_text = (
+        "📌 *Senarai arahan tersedia:*\n\n"
+        "🚀 /start - Mula gunakan bot\n"
+        "📌 /help - Lihat senarai arahan\n"
+        "🌐 /delima - Akses laman rasmi DELIMa KPM\n"
+        "📖 /ains - Akses sistem NILAM (AINS)\n"
+        "🔑 /resetpassword - Panduan reset kata laluan DELIMa\n"
+        "📊 /status - Status server & rekod\n\n"
+        "✍️ Untuk semakan, sila hantar *nama penuh murid*."
     )
+    bot.reply_to(message, help_text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['delima'])
-def send_delima(message):
+def send_delima_link(message):
     log_command(message, "/delima")
-    bot.reply_to(message, "🌐 Sila layari portal DELIMa KPM: https://idp1.moe.gov.my")
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton("🌐 Buka DELIMa", url="https://d2.delima.edu.my/"))
+    bot.reply_to(message, "🌐 Akses laman rasmi DELIMa KPM di pautan berikut:", reply_markup=markup)
 
 @bot.message_handler(commands=['ains'])
-def send_ains(message):
+def send_ains_link(message):
     log_command(message, "/ains")
-    bot.reply_to(message, "📝 AINS (Advanced Integrated NILAM System): https://ains.moe.gov.my/login?returnUrl=/")
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton("📖 Buka AINS", url="https://ains.moe.gov.my/login?returnUrl=/"))
+    bot.reply_to(
+        message,
+        "📖 Akses *Advanced Integrated NILAM System (AINS)* di pautan berikut:",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
 
 @bot.message_handler(commands=['resetpassword'])
 def send_reset_password(message):
@@ -91,29 +111,77 @@ def send_reset_password(message):
 @bot.message_handler(commands=['status'])
 def send_status(message):
     log_command(message, "/status")
+    total_records = len(df) if not df.empty else 0
     uptime_seconds = int(time.time() - START_TIME)
+
     days, remainder = divmod(uptime_seconds, 86400)
     hours, remainder = divmod(remainder, 3600)
     minutes, seconds = divmod(remainder, 60)
-    bot.reply_to(
-        message,
-        f"✅ Server aktif.\n"
-        f"⏱ Uptime: {days} hari, {hours} jam, {minutes} minit, {seconds} saat."
+
+    uptime_parts = []
+    if days > 0:
+        uptime_parts.append(f"{days} hari")
+    if hours > 0:
+        uptime_parts.append(f"{hours} jam")
+    if minutes > 0:
+        uptime_parts.append(f"{minutes} minit")
+    if seconds > 0:
+        uptime_parts.append(f"{seconds} saat")
+
+    uptime_text = " ".join(uptime_parts)
+
+    reply_text = (
+        "📊 *Status Server & Bot*\n\n"
+        f"🚀 Bot sedang berjalan\n"
+        f"👥 Jumlah rekod orang: {total_records}\n"
+        f"⏳ Server aktif: {uptime_text}\n\n"
+        "🌍 Source code: Github\n"
+        "💻 Server: Render\n"
+        "📡 Status monitor: UpTimeRobot\n"
+        "📊 Status page: https://stats.uptimerobot.com/k6aooeDaUq"
     )
+    bot.reply_to(message, reply_text, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: True)
-def echo_all(message):
+def send_info(message):
     log_message(message)
-    bot.reply_to(
-        message,
-        f"🔍 Nama '{message.text}' diterima. "
-        f"Sila tunggu proses semakan (demo sahaja)."
-    )
+    try:
+        search_name = message.text.strip().upper()
+
+        if "PASSWORD" in search_name or "KATA LALUAN" in search_name:
+            bot.reply_to(
+                message,
+                "🔑 Untuk isu kata laluan, sila hubungi *guru kelas anak anda* bagi bantuan reset.\n\n"
+                "📂 Pihak sekolah mengingatkan agar kata laluan sentiasa disimpan dengan baik.",
+                parse_mode="Markdown"
+            )
+            return
+
+        if df.empty:
+            bot.reply_to(message, "❌ Data tidak tersedia sekarang.")
+            return
+
+        matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
+
+        if matches.empty:
+            bot.reply_to(message, "⚠️ Maaf, nama tidak dijumpai dalam rekod.")
+        else:
+            row = matches.iloc[0]
+            reply_text = (
+                f"👤 Nama Murid: {row['Nama Murid']}\n"
+                f"📧 Email: {row.iloc[1]}\n"
+                f"🔑 Password: {row.iloc[2]}"
+            )
+            bot.reply_to(message, reply_text)
+
+    except Exception as e:
+        logging.error(f"Error in send_info handler: {e}")
+        bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
 # === AUTO RESTART SETIAP 15 MINIT ===
 def auto_restart():
     while True:
-        time.sleep(900)  # 15 minit = 900s
+        time.sleep(900)  # 15 minit
         logging.info("♻️ [Scheduled Restart] Restarting bot automatically (every 15 minutes)...")
         os.execv(sys.executable, ['python'] + sys.argv)
 
@@ -125,7 +193,6 @@ def run_bot():
             bot.polling(skip_pending=True, none_stop=True)
         except ApiTelegramException as e:
             if "409" in str(e):
-                # Conflict, tunggu 20 saat sebelum restart
                 logging.error(f"💥 Telegram API error 409 (Conflict): {e}. Restarting in 20s...")
                 time.sleep(20)
             else:
