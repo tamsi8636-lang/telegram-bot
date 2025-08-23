@@ -8,7 +8,6 @@ import telebot
 from telebot.apihelper import ApiTelegramException
 import pandas as pd
 import atexit
-import pickle
 import tempfile
 
 # === LOGGING SETUP ===
@@ -202,7 +201,7 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === MODIFIED POLLING LOOP WITH INSTANCE CHECK ===
+# === MODIFIED POLLING CYCLE (15s ON, 60s SLEEP) ===
 def polling_cycle():
     # Check if another instance is already running
     if not acquire_instance_lock():
@@ -214,17 +213,25 @@ def polling_cycle():
     
     while True:
         try:
-            logging.info("🚀 Starting polling...")
-            bot.polling(none_stop=True, skip_pending=True, long_polling_timeout=30)
+            logging.info("🚀 Starting polling (15-second active cycle)...")
+            
+            # Start polling with timeout 15 seconds
+            bot.polling(none_stop=True, skip_pending=True, timeout=15)
+            
+            # After 15 seconds, stop polling and sleep
+            logging.info("⏸️  Polling cycle completed, entering 60-second sleep mode...")
+            time.sleep(60)
+            
         except ApiTelegramException as e:
             if "409" in str(e):
-                logging.error(f"💥 Telegram API error: A request to the Telegram API was unsuccessful. Error code: 409. Description: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running. Restarting in 15s...")
+                logging.error(f"💥 Telegram API error: A request to the Telegram API was unsuccessful. Error code: 409. Description: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running. Entering 60s sleep...")
             else:
-                logging.error(f"💥 Telegram API error: {e}. Restarting in 15s...")
-            time.sleep(15)
+                logging.error(f"💥 Telegram API error: {e}. Entering 60s sleep...")
+            time.sleep(60)
+            
         except Exception as e:
-            logging.error(f"💥 Bot crash/error: {e}. Restarting in 15s...")
-            time.sleep(15)
+            logging.error(f"💥 Bot crash/error: {e}. Entering 60s sleep...")
+            time.sleep(60)
 
 # === MAIN START ===
 if __name__ == "__main__":
