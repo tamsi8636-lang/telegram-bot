@@ -40,7 +40,7 @@ def log_message(message):
     user_id = message.from_user.id
     logging.info(f"💬 Mesej biasa dari {user} (id={user_id}): {message.text}")
 
-# === LOAD EXCEL (contoh, boleh sesuaikan) ===
+# === LOAD EXCEL ===
 EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
 try:
     df = pd.read_excel(EXCEL_FILE)
@@ -178,12 +178,14 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === AUTO RESTART SETIAP 15 MINIT ===
-def auto_restart():
+# === SELF CHECK POLLING (SEMINIT SEKALI) ===
+def self_check():
     while True:
-        time.sleep(900)  # 15 minit
-        logging.info("♻️ [Scheduled Restart] Restarting bot automatically (every 15 minutes)...")
-        os.execv(sys.executable, ['python'] + sys.argv)
+        logging.info("🔎 [Self-Check] Memeriksa status polling...")
+        if not bot.threaded.polling_thread or not bot.threaded.polling_thread.is_alive():
+            logging.error("💥 [Self-Check] Polling tergantung/dah mati! Restarting bot...")
+            os.execv(sys.executable, ['python'] + sys.argv)
+        time.sleep(60)  # seminit sekali
 
 # === START BOT (TAHAN LASAK) ===
 def run_bot():
@@ -206,5 +208,5 @@ def run_bot():
 if __name__ == "__main__":
     START_TIME = time.time()
     keep_alive()
-    threading.Thread(target=auto_restart, daemon=True).start()
+    threading.Thread(target=self_check, daemon=True).start()
     run_bot()
