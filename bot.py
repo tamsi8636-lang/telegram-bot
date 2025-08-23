@@ -7,6 +7,9 @@ from flask import Flask
 import telebot
 from telebot.apihelper import ApiTelegramException
 import pandas as pd
+import atexit
+import pickle
+import tempfile
 
 # === LOGGING SETUP ===
 logging.basicConfig(
@@ -37,6 +40,49 @@ try:
 except FileNotFoundError:
     logging.error("❌ Excel file not found. Make sure it's in the same folder.")
     df = pd.DataFrame()
+
+# === SINGLE INSTANCE LOCK MECHANISM ===
+def acquire_instance_lock():
+    """Create a lock file to ensure only one instance runs"""
+    lock_file = os.path.join(tempfile.gettempdir(), f"delima_bot_{TOKEN}.lock")
+    
+    try:
+        # Try to create the lock file exclusively
+        fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+        # Write the current process ID to the lock file
+        with os.fdopen(fd, 'w') as f:
+            f.write(str(os.getpid()))
+        return True
+    except OSError:
+        # Lock file already exists, another instance is running
+        try:
+            # Check if the process that created the lock is still running
+            with open(lock_file, 'r') as f:
+                pid = int(f.read().strip())
+            # Check if process exists
+            os.kill(pid, 0)  # This will raise an exception if process doesn't exist
+            return False  # Another instance is still running
+        except (ValueError, OSError, IOError):
+            # Process doesn't exist or lock file is invalid, so we can take over
+            try:
+                os.remove(lock_file)
+                return acquire_instance_lock()
+            except:
+                return False
+    
+    return False
+
+def release_instance_lock():
+    """Remove the lock file when the bot stops"""
+    lock_file = os.path.join(tempfile.gettempdir(), f"delima_bot_{TOKEN}.lock")
+    try:
+        if os.path.exists(lock_file):
+            os.remove(lock_file)
+    except:
+        pass
+
+# Register cleanup function
+atexit.register(release_instance_lock)
 
 # === HANDLERS (TAK USIK SIKIT PUN) ===
 @bot.message_handler(commands=['start'])
@@ -156,14 +202,25 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === FIXED POLLING LOOP (STABIL) ===
+# === MODIFIED POLLING LOOP WITH INSTANCE CHECK ===
 def polling_cycle():
+    # Check if another instance is already running
+    if not acquire_instance_lock():
+        logging.error("❌ Another instance of the bot is already running. Exiting...")
+        logging.error("💥 Telegram API error: A request to the Telegram API was unsuccessful. Error code: 409. Description: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running.")
+        sys.exit(1)
+    
+    logging.info("✅ Acquired instance lock, starting bot...")
+    
     while True:
         try:
             logging.info("🚀 Starting polling...")
             bot.polling(none_stop=True, skip_pending=True, long_polling_timeout=30)
         except ApiTelegramException as e:
-            logging.error(f"💥 Telegram API error: {e}. Restarting in 15s...")
+            if "409" in str(e):
+                logging.error(f"💥 Telegram API error: A request to the Telegram API was unsuccessful. Error code: 409. Description: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running. Restarting in 15s...")
+            else:
+                logging.error(f"💥 Telegram API error: {e}. Restarting in 15s...")
             time.sleep(15)
         except Exception as e:
             logging.error(f"💥 Bot crash/error: {e}. Restarting in 15s...")
