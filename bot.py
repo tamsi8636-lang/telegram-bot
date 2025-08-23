@@ -57,48 +57,48 @@ except Exception as e:
     logging.error(f"❌ Error loading Excel: {e}")
     df = pd.DataFrame()
 
-# === RENDER-COMPATIBLE INSTANCE LOCK ===
+# === INSTANCE LOCK ===
+LOCK_FILE = "/tmp/delima_bot_render.lock"
+
 def acquire_instance_lock():
-    """Lock mechanism yang compatible dengan Render"""
-    lock_file = "/tmp/delima_bot_render.lock"
-    
     try:
-        fd = os.open(lock_file, os.O_CREAT | os.O_RDWR)
+        fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.write(fd, f"{os.getpid()},{time.time()}".encode())
             os.close(fd)
+            logging.info("🔒 Instance lock acquired")
             return True
         except (IOError, BlockingIOError):
             os.close(fd)
+            # Check for stale lock
             try:
-                with open(lock_file, 'r') as f:
+                with open(LOCK_FILE, 'r') as f:
                     data = f.read().split(',')
                     if len(data) == 2:
                         pid, timestamp = data
                         if time.time() - float(timestamp) > 60:
-                            os.remove(lock_file)
+                            os.remove(LOCK_FILE)
                             return acquire_instance_lock()
             except:
                 pass
+            logging.warning("⚠️ Another instance is running")
             return False
     except OSError as e:
         logging.error(f"❌ Lock file error: {e}")
         return False
 
 def release_instance_lock():
-    """Remove the lock file when the bot stops"""
-    lock_file = "/tmp/delima_bot_render.lock"
     try:
-        if os.path.exists(lock_file):
-            os.remove(lock_file)
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
             logging.info("🔓 Instance lock released")
     except Exception as e:
         logging.error(f"❌ Error releasing lock: {e}")
 
 atexit.register(release_instance_lock)
 
-# === HANDLERS (TAK USIK) ===
+# === HANDLERS (ASAL TAK USIK) ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(
@@ -216,38 +216,36 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === POLLING CYCLE UNTUK RENDER FREE TIER ===
+# === POLLING CYCLE 30s ACTIVE / 120s SLEEP ===
 def polling_cycle():
     logging.info("🚀 Polling cycle started (30s active, 120s sleep)")
 
-    if not acquire_instance_lock():
-        logging.error("❌ Another instance detected. Exiting.")
-        sys.exit(1)
+    while True:
+        if not acquire_instance_lock():
+            logging.warning("⚠️ Another instance detected. Sleeping 60s before retry...")
+            time.sleep(60)
+            continue
 
-    try:
-        while True:
-            try:
-                # Polling aktif 30s
-                end_time = time.time() + 30
-                logging.info("📡 Starting polling for 30s...")
+        try:
+            # Polling aktif 30s
+            end_time = time.time() + 30
+            logging.info("📡 Starting polling for 30s...")
 
-                while time.time() < end_time:
+            while time.time() < end_time:
+                try:
                     bot.polling(none_stop=False, skip_pending=True, timeout=10, interval=2)
+                except ApiTelegramException as e:
+                    logging.error(f"💥 Telegram API error: {e}")
+                    break
+                except Exception as e:
+                    logging.error(f"💥 General error during polling: {e}")
+                    break
 
-                logging.info("⏸️ Polling stopped, sleeping 120s...")
-                time.sleep(120)
+        finally:
+            release_instance_lock()
 
-            except ApiTelegramException as e:
-                logging.error(f"💥 Telegram API error: {e}")
-                logging.info("😴 Sleeping 60s before retry...")
-                time.sleep(60)
-
-            except Exception as e:
-                logging.error(f"💥 General error: {e}")
-                logging.info("😴 Sleeping 30s before retry...")
-                time.sleep(30)
-    finally:
-        release_instance_lock()
+        logging.info("⏸️ Polling stopped, sleeping 120s...")
+        time.sleep(120)
 
 # === MAIN FUNCTION ===
 if __name__ == "__main__":
