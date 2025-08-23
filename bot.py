@@ -146,7 +146,6 @@ def send_info(message):
     log_message(message)
     try:
         search_name = message.text.strip().upper()
-
         if "PASSWORD" in search_name or "KATA LALUAN" in search_name:
             bot.reply_to(
                 message,
@@ -161,7 +160,6 @@ def send_info(message):
             return
 
         matches = df[df['Nama Murid'].str.contains(search_name, case=False, na=False)]
-
         if matches.empty:
             bot.reply_to(message, "⚠️ Maaf, nama tidak dijumpai dalam rekod.")
         else:
@@ -172,58 +170,57 @@ def send_info(message):
                 f"🔑 Password: {row.iloc[2]}"
             )
             bot.reply_to(message, reply_text)
-
     except Exception as e:
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === POLLING SELANG 15 SAAT ON / 1 MIN OFF ===
-polling_active = False
-
+# === POLLING SELANG 15 SAAT ON / 1 MIN OFF (SAFE) ===
 def polling_cycle():
-    global polling_active
     while True:
         try:
             logging.info("🚀 Polling bot ON selama 15 saat...")
-            polling_active = True
-            start_time = time.time()
-            while time.time() - start_time < 15:
-                try:
-                    bot.polling(timeout=15, long_polling_timeout=15, skip_pending=True, none_stop=True)
-                except ApiTelegramException as e:
-                    if "409" in str(e):
-                        logging.error(f"💥 Telegram API error 409 (Conflict): {e}. Restarting in 20s...")
-                        time.sleep(20)
-                    else:
-                        logging.error(f"💥 Telegram API error: {e}. Restarting immediately...")
-                        os.execv(sys.executable, ['python'] + sys.argv)
-                except Exception as e:
-                    logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting immediately...")
+            try:
+                bot.polling(timeout=15, long_polling_timeout=15, skip_pending=True, none_stop=True)
+            except ApiTelegramException as e:
+                if "409" in str(e):
+                    logging.error(f"💥 Telegram API error 409 (Conflict): {e}. Stop polling dan restart...")
+                    bot.stop_polling()
+                    time.sleep(20)
+                else:
+                    logging.error(f"💥 Telegram API error: {e}. Restarting...")
                     os.execv(sys.executable, ['python'] + sys.argv)
+            except Exception as e:
+                logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting...")
+                os.execv(sys.executable, ['python'] + sys.argv)
         finally:
-            polling_active = False
             logging.info("⏸ Polling bot OFF selama 1 minit...")
+            bot.stop_polling()
             time.sleep(60)
 
-# === SELF-CHECK DUA KALI SEHARI ===
+# === SELF-CHECK 2X SEHARI ===
 def self_check():
-    global polling_active
     while True:
         for _ in range(2):  # dua kali sehari
             time.sleep(43200)  # 12 jam
-            if polling_active:
-                logging.info("⚠️ Self-check: Bot sedang polling (ON), skip restart.")
-            else:
-                logging.info("♻️ Self-check: Bot idle, memeriksa polling, restart jika hang...")
-                try:
-                    bot.get_me()
-                except Exception as e:
-                    logging.error(f"💥 Self-check detect bot hang: {e}. Restarting...")
-                    os.execv(sys.executable, ['python'] + sys.argv)
+            try:
+                bot.get_me()
+                logging.info("✅ Self-check: Bot responsive.")
+            except Exception as e:
+                logging.error(f"💥 Self-check detect bot hang: {e}. Restarting...")
+                os.execv(sys.executable, ['python'] + sys.argv)
+
+# === CPU USAGE LOG HARIAN ===
+def cpu_usage_logger():
+    while True:
+        # anggaran masa polling aktif
+        polling_seconds = 15 * 48  # 15s * 48 cycles = 12 min / hr
+        logging.info(f"🖥 Anggaran CPU active hari ini: ~{polling_seconds/3600:.2f} jam")
+        time.sleep(86400)
 
 # === MAIN START ===
 if __name__ == "__main__":
     START_TIME = time.time()
     keep_alive()
     threading.Thread(target=self_check, daemon=True).start()
+    threading.Thread(target=cpu_usage_logger, daemon=True).start()
     polling_cycle()
