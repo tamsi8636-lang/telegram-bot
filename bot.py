@@ -3,12 +3,13 @@ import sys
 import time
 import threading
 import logging
-from flask import Flask
+from flask import Flask, request
 import telebot
 from telebot.apihelper import ApiTelegramException
 import pandas as pd
 import atexit
 import tempfile
+import fcntl
 
 # === LOGGING SETUP ===
 logging.basicConfig(
@@ -18,17 +19,26 @@ logging.basicConfig(
 
 # === TELEGRAM BOT SETUP ===
 TOKEN = os.environ.get("BOT_TOKEN")
+if not TOKEN:
+    logging.error("❌ BOT_TOKEN not found in environment variables")
+    sys.exit(1)
+    
 bot = telebot.TeleBot(TOKEN)
 
 # === FLASK KEEP-ALIVE ===
 app = Flask(__name__)
+
 @app.route('/')
 def home():
     return "Bot is alive!"
 
+@app.route('/health')
+def health_check():
+    return "✅ OK", 200
+
 def keep_alive():
     port = int(os.environ.get("PORT", 5000))
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port)).start()
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)).start()
 
 # === LOAD EXCEL ===
 EXCEL_FILE = "ID DELIMA - DATA FEED CHATBOT.xlsx"
@@ -39,51 +49,48 @@ try:
 except FileNotFoundError:
     logging.error("❌ Excel file not found. Make sure it's in the same folder.")
     df = pd.DataFrame()
+except Exception as e:
+    logging.error(f"❌ Error loading Excel: {e}")
+    df = pd.DataFrame()
 
-# === SINGLE INSTANCE LOCK MECHANISM ===
+# === IMPROVED INSTANCE LOCK MECHANISM ===
 def acquire_instance_lock():
     """Create a lock file to ensure only one instance runs"""
-    lock_file = os.path.join(tempfile.gettempdir(), f"delima_bot_{TOKEN}.lock")
+    lock_file = os.path.join(tempfile.gettempdir(), f"delima_bot_{hash(TOKEN)}.lock")
     
     try:
-        # Try to create the lock file exclusively
-        fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
-        # Write the current process ID to the lock file
-        with os.fdopen(fd, 'w') as f:
-            f.write(str(os.getpid()))
-        return True
-    except OSError:
-        # Lock file already exists, another instance is running
+        # Try to create and lock the file exclusively
+        fd = os.open(lock_file, os.O_CREAT | os.O_RDWR, 0o644)
         try:
-            # Check if the process that created the lock is still running
-            with open(lock_file, 'r') as f:
-                pid = int(f.read().strip())
-            # Check if process exists
-            os.kill(pid, 0)  # This will raise an exception if process doesn't exist
-            return False  # Another instance is still running
-        except (ValueError, OSError, IOError):
-            # Process doesn't exist or lock file is invalid, so we can take over
-            try:
-                os.remove(lock_file)
-                return acquire_instance_lock()
-            except:
-                return False
-    
-    return False
+            # Try to acquire exclusive lock (non-blocking)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            
+            # Write the current process ID to the lock file
+            os.write(fd, f"{os.getpid()}".encode())
+            return True
+            
+        except (IOError, BlockingIOError):
+            # Lock failed, another instance is running
+            os.close(fd)
+            return False
+            
+    except OSError as e:
+        logging.error(f"❌ Lock file error: {e}")
+        return False
 
 def release_instance_lock():
     """Remove the lock file when the bot stops"""
-    lock_file = os.path.join(tempfile.gettempdir(), f"delima_bot_{TOKEN}.lock")
+    lock_file = os.path.join(tempfile.gettempdir(), f"delima_bot_{hash(TOKEN)}.lock")
     try:
         if os.path.exists(lock_file):
             os.remove(lock_file)
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"❌ Error releasing lock: {e}")
 
 # Register cleanup function
 atexit.register(release_instance_lock)
 
-# === HANDLERS (TAK USIK SIKIT PUN) ===
+# === HANDLERS (ORIGINAL TAK USIK) ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(
@@ -201,7 +208,7 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === MODIFIED POLLING CYCLE (15s ON, 60s SLEEP) ===
+# === OPTIMIZED POLLING CYCLE (15s ON, 60s SLEEP) ===
 def polling_cycle():
     # Check if another instance is already running
     if not acquire_instance_lock():
@@ -211,30 +218,62 @@ def polling_cycle():
     
     logging.info("✅ Acquired instance lock, starting bot...")
     
+    # Counter untuk avoid infinite error loop
+    error_count = 0
+    max_errors = 5
+    
     while True:
         try:
             logging.info("🚀 Starting polling (15-second active cycle)...")
             
+            # Stop any existing polling first
+            try:
+                bot.stop_polling()
+            except:
+                pass
+            
             # Start polling with timeout 15 seconds
-            bot.polling(none_stop=True, skip_pending=True, timeout=15)
+            bot.polling(none_stop=True, skip_pending=True, timeout=15, interval=1)
+            
+            # Reset error count on success
+            error_count = 0
             
             # After 15 seconds, stop polling and sleep
             logging.info("⏸️  Polling cycle completed, entering 60-second sleep mode...")
             time.sleep(60)
             
         except ApiTelegramException as e:
+            error_count += 1
             if "409" in str(e):
-                logging.error(f"💥 Telegram API error: A request to the Telegram API was unsuccessful. Error code: 409. Description: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running. Entering 60s sleep...")
+                logging.error(f"💥 Telegram API error: 409 Conflict. Entering 60s sleep... (Error count: {error_count})")
             else:
-                logging.error(f"💥 Telegram API error: {e}. Entering 60s sleep...")
+                logging.error(f"💥 Telegram API error: {e}. Entering 60s sleep... (Error count: {error_count})")
+            
+            if error_count >= max_errors:
+                logging.error("🛑 Too many errors, exiting to avoid infinite loop...")
+                sys.exit(1)
+                
             time.sleep(60)
             
         except Exception as e:
-            logging.error(f"💥 Bot crash/error: {e}. Entering 60s sleep...")
+            error_count += 1
+            logging.error(f"💥 Bot crash/error: {e}. Entering 60s sleep... (Error count: {error_count})")
+            
+            if error_count >= max_errors:
+                logging.error("🛑 Too many errors, exiting to avoid infinite loop...")
+                sys.exit(1)
+                
             time.sleep(60)
 
 # === MAIN START ===
 if __name__ == "__main__":
     START_TIME = time.time()
+    
+    # Start Flask in background
     keep_alive()
+    
+    # Allow Flask to start first
+    time.sleep(2)
+    
+    # Start polling cycle
     polling_cycle()
