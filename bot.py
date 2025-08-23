@@ -24,7 +24,7 @@ if not TOKEN:
     
 bot = telebot.TeleBot(TOKEN)
 
-# === FLASK SETUP UNTUK RENDER ===
+# === FLASK SETUP ===
 app = Flask(__name__)
 
 @app.route('/')
@@ -71,7 +71,6 @@ def acquire_instance_lock():
             return True
         except (IOError, BlockingIOError):
             os.close(fd)
-            # Check for stale lock
             try:
                 with open(LOCK_FILE, 'r') as f:
                     data = f.read().split(',')
@@ -216,7 +215,7 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === POLLING CYCLE 30s ACTIVE / 120s SLEEP ===
+# === POLLING CYCLE 30s ACTIVE / 120s SLEEP DENGAN HEARTBEAT LOG ===
 def polling_cycle():
     logging.info("🚀 Polling cycle started (30s active, 120s sleep)")
 
@@ -227,13 +226,12 @@ def polling_cycle():
             continue
 
         try:
-            # Polling aktif 30s
             end_time = time.time() + 30
             logging.info("📡 Starting polling for 30s...")
-
             while time.time() < end_time:
                 try:
-                    bot.polling(none_stop=False, skip_pending=True, timeout=10, interval=2)
+                    bot.polling(none_stop=False, skip_pending=True, timeout=5, interval=2)
+                    logging.debug("💓 Polling heartbeat...")  # debug level → off in production
                 except ApiTelegramException as e:
                     logging.error(f"💥 Telegram API error: {e}")
                     break
@@ -251,7 +249,6 @@ def polling_cycle():
 if __name__ == "__main__":
     START_TIME = time.time()
     
-    # Start Flask dalam thread terpisah
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
