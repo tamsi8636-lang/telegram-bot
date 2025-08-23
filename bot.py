@@ -63,32 +63,25 @@ def acquire_instance_lock():
     lock_file = "/tmp/delima_bot_render.lock"
     
     try:
-        # Try to create and lock the file
         fd = os.open(lock_file, os.O_CREAT | os.O_RDWR)
         try:
-            # Try to acquire exclusive lock
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            
-            # Write process info
             os.write(fd, f"{os.getpid()},{time.time()}".encode())
             os.close(fd)
             return True
-            
         except (IOError, BlockingIOError):
             os.close(fd)
-            # Check if lock file is stale (older than 1 minute)
             try:
                 with open(lock_file, 'r') as f:
                     data = f.read().split(',')
                     if len(data) == 2:
                         pid, timestamp = data
-                        if time.time() - float(timestamp) > 60:  # 1 minute
+                        if time.time() - float(timestamp) > 60:
                             os.remove(lock_file)
                             return acquire_instance_lock()
             except:
                 pass
             return False
-            
     except OSError as e:
         logging.error(f"❌ Lock file error: {e}")
         return False
@@ -103,10 +96,9 @@ def release_instance_lock():
     except Exception as e:
         logging.error(f"❌ Error releasing lock: {e}")
 
-# Register cleanup function
 atexit.register(release_instance_lock)
 
-# === HANDLERS (ORIGINAL TAK USIK) ===
+# === HANDLERS (TAK USIK) ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(
@@ -224,67 +216,38 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === RENDER-OPTIMIZED POLLING CYCLE ===
+# === POLLING CYCLE UNTUK RENDER FREE TIER ===
 def polling_cycle():
-    # Wait untuk pastikan previous instance completely shutdown
-    logging.info("⏳ Waiting for previous instance to shutdown...")
-    time.sleep(10)
-    
-    # Check instance lock dengan strict validation
+    logging.info("🚀 Polling cycle started (30s active, 120s sleep)")
+
     if not acquire_instance_lock():
-        logging.error("❌ Multiple instance detected. EXITING IMMEDIATELY.")
-        logging.error("💥 Telegram API error: A request to the Telegram API was unsuccessful. Error code: 409. Description: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running.")
+        logging.error("❌ Another instance detected. Exiting.")
         sys.exit(1)
-    
-    logging.info("✅ Acquired instance lock, starting bot...")
-    
-    error_count = 0
-    max_errors = 2  # Lower threshold untuk Render
-    
-    while error_count < max_errors:
-        try:
-            # Stop any existing polling first
+
+    try:
+        while True:
             try:
-                bot.stop_polling()
-                time.sleep(3)
-            except:
-                pass
-            
-            logging.info("🚀 Starting polling (15-second active cycle)...")
-            
-            # Start polling dengan timeout
-            bot.polling(none_stop=True, skip_pending=True, timeout=15, interval=1)
-            
-            # Successful polling
-            logging.info("⏸️  Polling completed, entering 60s sleep...")
-            time.sleep(60)
-            error_count = 0  # Reset error count
-            
-        except ApiTelegramException as e:
-            error_count += 1
-            if "409" in str(e):
-                logging.error(f"💥 API Error 409. Sleep 60s... (Error {error_count}/{max_errors})")
-                if error_count >= max_errors:
-                    logging.error("🛑 Max errors reached. Exiting gracefully...")
-                    break
+                # Polling aktif 30s
+                end_time = time.time() + 30
+                logging.info("📡 Starting polling for 30s...")
+
+                while time.time() < end_time:
+                    bot.polling(none_stop=False, skip_pending=True, timeout=10, interval=2)
+
+                logging.info("⏸️ Polling stopped, sleeping 120s...")
+                time.sleep(120)
+
+            except ApiTelegramException as e:
+                logging.error(f"💥 Telegram API error: {e}")
+                logging.info("😴 Sleeping 60s before retry...")
                 time.sleep(60)
-            else:
-                logging.error(f"💥 Other API error: {e}")
+
+            except Exception as e:
+                logging.error(f"💥 General error: {e}")
+                logging.info("😴 Sleeping 30s before retry...")
                 time.sleep(30)
-                
-        except Exception as e:
-            error_count += 1
-            logging.error(f"💥 General error: {e}. Sleep 30s... (Error {error_count}/{max_errors})")
-            if error_count >= max_errors:
-                logging.error("🛑 Max errors reached. Exiting gracefully...")
-                break
-            time.sleep(30)
-    
-    # Clean exit untuk allow Render restart properly
-    logging.info("🔄 Shutting down gracefully for Render restart...")
-    release_instance_lock()
-    time.sleep(3)
-    sys.exit(0)
+    finally:
+        release_instance_lock()
 
 # === MAIN FUNCTION ===
 if __name__ == "__main__":
@@ -294,9 +257,7 @@ if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
-    # Wait untuk Flask start sepenuhnya
-    logging.info("⏳ Waiting for Flask to start...")
-    time.sleep(15)
+    logging.info("⏳ Waiting 10s for Flask to be ready...")
+    time.sleep(10)
     
-    # Start polling cycle
     polling_cycle()
