@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 
 # === TELEGRAM BOT SETUP ===
-TOKEN = os.environ.get("BOT_TOKEN")  # Token simpan di Render Environment
+TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
 # === FLASK KEEP-ALIVE ===
@@ -178,14 +178,14 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === SELF CHECK POLLING (SEMINIT SEKALI) ===
+# === SELF CHECK POLLING (SEHARI SEKALI) ===
 def self_check():
     while True:
         logging.info("🔎 [Self-Check] Memeriksa status polling...")
         if not bot.threaded.polling_thread or not bot.threaded.polling_thread.is_alive():
             logging.error("💥 [Self-Check] Polling tergantung/dah mati! Restarting bot...")
             os.execv(sys.executable, ['python'] + sys.argv)
-        time.sleep(60)  # seminit sekali
+        time.sleep(86400)  # SEHARI SEKALI
 
 # === START BOT (TAHAN LASAK) ===
 def run_bot():
