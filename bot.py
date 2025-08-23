@@ -20,7 +20,6 @@ bot = telebot.TeleBot(TOKEN)
 
 # === FLASK KEEP-ALIVE ===
 app = Flask(__name__)
-
 @app.route('/')
 def home():
     return "Bot is alive!"
@@ -29,7 +28,7 @@ def keep_alive():
     port = int(os.environ.get("PORT", 5000))
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port)).start()
 
-# === UTIL: AUTO LOG SEMUA COMMAND & MESEJ ===
+# === LOGGING UTIL ===
 def log_command(message, cmd_name):
     user = message.from_user.username or "UnknownUser"
     user_id = message.from_user.id
@@ -178,35 +177,53 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === SELF CHECK POLLING (SEHARI SEKALI) ===
-def self_check():
-    while True:
-        logging.info("🔎 [Self-Check] Memeriksa status polling...")
-        if not bot.threaded.polling_thread or not bot.threaded.polling_thread.is_alive():
-            logging.error("💥 [Self-Check] Polling tergantung/dah mati! Restarting bot...")
-            os.execv(sys.executable, ['python'] + sys.argv)
-        time.sleep(86400)  # SEHARI SEKALI
+# === POLLING SELANG 15 SAAT ON / 1 MIN OFF ===
+polling_active = False
 
-# === START BOT (TAHAN LASAK) ===
-def run_bot():
+def polling_cycle():
+    global polling_active
     while True:
         try:
-            logging.info("🚀 Bot polling dimulakan...")
-            bot.polling(skip_pending=True, none_stop=True)
-        except ApiTelegramException as e:
-            if "409" in str(e):
-                logging.error(f"💥 Telegram API error 409 (Conflict): {e}. Restarting in 20s...")
-                time.sleep(20)
+            logging.info("🚀 Polling bot ON selama 15 saat...")
+            polling_active = True
+            start_time = time.time()
+            while time.time() - start_time < 15:
+                try:
+                    bot.polling(timeout=15, long_polling_timeout=15, skip_pending=True, none_stop=True)
+                except ApiTelegramException as e:
+                    if "409" in str(e):
+                        logging.error(f"💥 Telegram API error 409 (Conflict): {e}. Restarting in 20s...")
+                        time.sleep(20)
+                    else:
+                        logging.error(f"💥 Telegram API error: {e}. Restarting immediately...")
+                        os.execv(sys.executable, ['python'] + sys.argv)
+                except Exception as e:
+                    logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting immediately...")
+                    os.execv(sys.executable, ['python'] + sys.argv)
+        finally:
+            polling_active = False
+            logging.info("⏸ Polling bot OFF selama 1 minit...")
+            time.sleep(60)
+
+# === SELF-CHECK DUA KALI SEHARI ===
+def self_check():
+    global polling_active
+    while True:
+        for _ in range(2):  # dua kali sehari
+            time.sleep(43200)  # 12 jam
+            if polling_active:
+                logging.info("⚠️ Self-check: Bot sedang polling (ON), skip restart.")
             else:
-                logging.error(f"💥 Telegram API error: {e}. Restarting immediately...")
-                os.execv(sys.executable, ['python'] + sys.argv)
-        except Exception as e:
-            logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting immediately...")
-            os.execv(sys.executable, ['python'] + sys.argv)
+                logging.info("♻️ Self-check: Bot idle, memeriksa polling, restart jika hang...")
+                try:
+                    bot.get_me()
+                except Exception as e:
+                    logging.error(f"💥 Self-check detect bot hang: {e}. Restarting...")
+                    os.execv(sys.executable, ['python'] + sys.argv)
 
 # === MAIN START ===
 if __name__ == "__main__":
     START_TIME = time.time()
     keep_alive()
     threading.Thread(target=self_check, daemon=True).start()
-    run_bot()
+    polling_cycle()
