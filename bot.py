@@ -174,27 +174,23 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === POLLING SELANG 15 SAAT ON / 1 MIN OFF (SAFE) ===
+# === POLLING SELANG 15 SAAT ON / 1 MIN OFF (BETUL-BETUL CYCLING) ===
 def polling_cycle():
     while True:
         try:
             logging.info("🚀 Polling bot ON selama 15 saat...")
-            try:
-                bot.polling(timeout=15, long_polling_timeout=15, skip_pending=True, none_stop=True)
-            except ApiTelegramException as e:
-                if "409" in str(e):
-                    logging.error(f"💥 Telegram API error 409 (Conflict): {e}. Stop polling dan restart...")
-                    bot.stop_polling()
-                    time.sleep(20)
-                else:
-                    logging.error(f"💥 Telegram API error: {e}. Restarting...")
-                    os.execv(sys.executable, ['python'] + sys.argv)
-            except Exception as e:
-                logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting...")
-                os.execv(sys.executable, ['python'] + sys.argv)
+            t = threading.Thread(target=lambda: bot.polling(
+                none_stop=True, skip_pending=True, long_polling_timeout=15))
+            t.start()
+            time.sleep(15)  # biar bot hidup 15 saat
+            bot.stop_polling()
+            t.join()
+        except ApiTelegramException as e:
+            logging.error(f"💥 Telegram API error: {e}. Restarting...")
+        except Exception as e:
+            logging.error(f"💥 Bot crash/disconnect/error: {e}. Restarting...")
         finally:
             logging.info("⏸ Polling bot OFF selama 1 minit...")
-            bot.stop_polling()
             time.sleep(60)
 
 # === SELF-CHECK 2X SEHARI ===
