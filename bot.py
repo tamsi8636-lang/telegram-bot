@@ -215,22 +215,22 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === POLLING CYCLE 30s ACTIVE / 120s SLEEP DENGAN HEARTBEAT LOG ===
+# === POLLING CYCLE 4s ACTIVE / 16s SLEEP DENGAN HEARTBEAT LOG ===
 def polling_cycle():
-    logging.info("🚀 Polling cycle started (30s active, 120s sleep)")
+    logging.info("🚀 Polling cycle started (4s active, 16s sleep)")
 
     while True:
         if not acquire_instance_lock():
-            logging.warning("⚠️ Another instance detected. Sleeping 60s before retry...")
-            time.sleep(60)
+            logging.warning("⚠️ Another instance detected. Sleeping 5s before retry...")
+            time.sleep(5)
             continue
 
         try:
-            end_time = time.time() + 30
-            logging.info("📡 Starting polling for 30s...")
+            end_time = time.time() + 4
+            logging.info("📡 Starting polling for 4s...")
             while time.time() < end_time:
                 try:
-                    bot.polling(none_stop=False, skip_pending=True, timeout=5, interval=2)
+                    bot.polling(none_stop=False, skip_pending=True, timeout=2, interval=1)
                     logging.debug("💓 Polling heartbeat...")  # debug level → off in production
                 except ApiTelegramException as e:
                     logging.error(f"💥 Telegram API error: {e}")
@@ -242,8 +242,8 @@ def polling_cycle():
         finally:
             release_instance_lock()
 
-        logging.info("⏸️ Polling stopped, sleeping 120s...")
-        time.sleep(120)
+        logging.info("⏸️ Polling stopped, sleeping 16s...")
+        time.sleep(16)
 
 # === MAIN FUNCTION ===
 if __name__ == "__main__":
