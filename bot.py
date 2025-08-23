@@ -71,17 +71,7 @@ def acquire_instance_lock():
             return True
         except (IOError, BlockingIOError):
             os.close(fd)
-            try:
-                with open(LOCK_FILE, 'r') as f:
-                    data = f.read().split(',')
-                    if len(data) == 2:
-                        pid, timestamp = data
-                        if time.time() - float(timestamp) > 60:
-                            os.remove(LOCK_FILE)
-                            return acquire_instance_lock()
-            except:
-                pass
-            logging.warning("⚠️ Another instance is running")
+            logging.error("⚠️ Another instance is running. Exiting.")
             return False
     except OSError as e:
         logging.error(f"❌ Lock file error: {e}")
@@ -215,35 +205,34 @@ def send_info(message):
         logging.error(f"Error in send_info handler: {e}")
         bot.reply_to(message, "⚠️ Maaf, berlaku ralat dalam sistem.")
 
-# === POLLING CYCLE 4s ACTIVE / 16s SLEEP DENGAN HEARTBEAT LOG ===
-def polling_cycle():
-    logging.info("🚀 Polling cycle started (4s active, 16s sleep)")
+# === CONTINUOUS POLLING DENGAN “SELANG SELI” HEARTBEAT ===
+def polling_with_sleep():
+    if not acquire_instance_lock():
+        logging.error("⚠️ Cannot acquire lock. Exiting.")
+        sys.exit(1)
 
+    try:
+        logging.info("🚀 Starting continuous polling with sleep simulation")
+
+        while True:
+            try:
+                # Polling continuous dengan timeout 5s
+                bot.polling(none_stop=True, skip_pending=True, timeout=5)
+            except ApiTelegramException as e:
+                logging.error(f"💥 Telegram API error: {e}. Sleeping 5s before retry...")
+                time.sleep(5)
+            except Exception as e:
+                logging.error(f"💥 General error: {e}. Sleeping 5s before retry...")
+                time.sleep(5)
+
+    finally:
+        release_instance_lock()
+
+# === HEARTBEAT LOG THREAD (CPU rendah) ===
+def heartbeat_log():
     while True:
-        if not acquire_instance_lock():
-            logging.warning("⚠️ Another instance detected. Sleeping 5s before retry...")
-            time.sleep(5)
-            continue
-
-        try:
-            end_time = time.time() + 4
-            logging.info("📡 Starting polling for 4s...")
-            while time.time() < end_time:
-                try:
-                    bot.polling(none_stop=False, skip_pending=True, timeout=2, interval=1)
-                    logging.debug("💓 Polling heartbeat...")  # debug level → off in production
-                except ApiTelegramException as e:
-                    logging.error(f"💥 Telegram API error: {e}")
-                    break
-                except Exception as e:
-                    logging.error(f"💥 General error during polling: {e}")
-                    break
-
-        finally:
-            release_instance_lock()
-
-        logging.info("⏸️ Polling stopped, sleeping 16s...")
-        time.sleep(16)
+        logging.info("💓 Bot heartbeat - polling active...")
+        time.sleep(10)  # adjustable interval untuk log saja, CPU rendah
 
 # === MAIN FUNCTION ===
 if __name__ == "__main__":
@@ -252,7 +241,12 @@ if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
+    # Heartbeat log thread
+    heartbeat_thread = threading.Thread(target=heartbeat_log, daemon=True)
+    heartbeat_thread.start()
+    
     logging.info("⏳ Waiting 10s for Flask to be ready...")
     time.sleep(10)
     
-    polling_cycle()
+    # Start polling continuous
+    polling_with_sleep()
